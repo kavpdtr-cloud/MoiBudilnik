@@ -1,37 +1,46 @@
-name: Собрать APK
+
+name: Build Android APK
 
 on:
   workflow_dispatch:
   push:
-    branches: [ main ]
+    branches:
+      - main
 
 permissions:
   contents: read
 
 jobs:
   build:
-    name: Сборка Android APK
+    name: Build alarm widget
     runs-on: ubuntu-latest
     timeout-minutes: 30
+
     steps:
-      - name: Получить исходный код
+      - name: Checkout project
         uses: actions/checkout@v4
-      - name: Установить Java 17
+
+      - name: Setup Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
-      - name: Подготовить Android SDK
+
+      - name: Setup Android SDK
         uses: android-actions/setup-android@v3
-      - name: Установить Android SDK 35
+
+      - name: Install Android SDK 35
         run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
-      - name: Скачать Gradle 8.9
-        run: |
-          curl -L --fail --retry 3 https://services.gradle.org/distributions/gradle-8.9-bin.zip -o "$RUNNER_TEMP/gradle-8.9-bin.zip"
-          unzip -q "$RUNNER_TEMP/gradle-8.9-bin.zip" -d "$RUNNER_TEMP"
-      - name: Собрать APK
-        run: "$RUNNER_TEMP/gradle-8.9/bin/gradle" --no-daemon assembleDebug
-      - name: Сохранить готовый APK
+
+      - name: Setup Gradle 8.9
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: '8.9'
+
+      - name: Build APK
+        run: gradle --no-daemon assembleDebug
+
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: MoiBudilnik-debug-APK

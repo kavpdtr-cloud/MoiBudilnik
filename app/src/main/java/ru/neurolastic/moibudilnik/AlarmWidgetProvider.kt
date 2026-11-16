@@ -11,6 +11,7 @@ import android.os.Build
 import android.provider.AlarmClock
 import android.text.format.DateFormat
 import android.widget.RemoteViews
+import android.widget.Toast
 import java.util.Date
 
 class AlarmWidgetProvider : AppWidgetProvider() {
@@ -36,6 +37,15 @@ class AlarmWidgetProvider : AppWidgetProvider() {
     companion object {
         private const val REQUEST_OPEN_ALARMS = 4101
 
+        // HONOR Clock first; the remaining packages cover common Android clock apps.
+        private val CLOCK_PACKAGES = listOf(
+            "com.hihonor.deskclock",
+            "com.android.deskclock",
+            "com.google.android.deskclock",
+            "com.huawei.deskclock",
+            "com.huawei.android.deskclock"
+        )
+
         private fun updateAll(context: Context) {
             val manager = AppWidgetManager.getInstance(context)
             val ids = manager.getAppWidgetIds(
@@ -59,14 +69,18 @@ class AlarmWidgetProvider : AppWidgetProvider() {
                 views.setTextViewText(R.id.alarm_time, "— — : — —")
                 views.setTextViewText(R.id.alarm_caption, "Нет активных будильников")
             } else {
-                val time = DateFormat.getTimeFormat(context).format(Date(nextAlarm.triggerTime))
-                val date = DateFormat.getDateFormat(context).format(Date(nextAlarm.triggerTime))
+                val whenAlarm = Date(nextAlarm.triggerTime)
+                val time = DateFormat.getTimeFormat(context).format(whenAlarm)
+                val date = DateFormat.getDateFormat(context).format(whenAlarm)
                 views.setTextViewText(R.id.alarm_time, time)
                 views.setTextViewText(R.id.alarm_caption, "Следующее срабатывание · $date")
             }
 
-            val openIntent = Intent(AlarmClock.ACTION_SHOW_ALARMS).apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            // Route widget taps through MainActivity so the same HONOR-aware
+            // fallback is used by both the app button and the widget itself.
+            val openIntent = Intent(context, MainActivity::class.java).apply {
+                putExtra(MainActivity.EXTRA_OPEN_ALARMS, true)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
             }
             val pendingIntent = PendingIntent.getActivity(
                 context,
@@ -78,17 +92,60 @@ class AlarmWidgetProvider : AppWidgetProvider() {
             manager.updateAppWidget(widgetId, views)
         }
 
-        fun openAlarms(context: Context) {
-            val intent = Intent(AlarmClock.ACTION_SHOW_ALARMS).apply {
+        /**
+         * Opens the alarm screen through the standard Android action when the
+         * clock app supports it. Otherwise launches the installed clock app.
+         * Returns false and shows a message if no known clock app is found.
+         */
+        fun openAlarms(context: Context): Boolean {
+            val packageManager = context.packageManager
+
+            for (clockPackage in CLOCK_PACKAGES) {
+                val showAlarmsIntent = Intent(AlarmClock.ACTION_SHOW_ALARMS).apply {
+                    setPackage(clockPackage)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+
+                try {
+                    if (showAlarmsIntent.resolveActivity(packageManager) != null) {
+                        context.startActivity(showAlarmsIntent)
+                        return true
+                    }
+                } catch (_: Exception) {
+                    // Try launching this clock app's main screen below.
+                }
+
+                try {
+                    val launchIntent = packageManager.getLaunchIntentForPackage(clockPackage)
+                    if (launchIntent != null) {
+                        launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        context.startActivity(launchIntent)
+                        return true
+                    }
+                } catch (_: Exception) {
+                    // Continue to the next known clock package.
+                }
+            }
+
+            // Last attempt: let Android resolve any app that supports this action.
+            val genericIntent = Intent(AlarmClock.ACTION_SHOW_ALARMS).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             try {
-                context.startActivity(intent)
+                if (genericIntent.resolveActivity(packageManager) != null) {
+                    context.startActivity(genericIntent)
+                    return true
+                }
             } catch (_: Exception) {
-                val fallback = context.packageManager.getLaunchIntentForPackage("com.android.deskclock")
-                    ?: context.packageManager.getLaunchIntentForPackage("com.google.android.deskclock")
-                if (fallback != null) context.startActivity(fallback)
+                // Fall through to the visible error message.
             }
+
+            Toast.makeText(
+                context,
+                "Не удалось найти приложение «Часы». Откройте его вручную один раз.",
+                Toast.LENGTH_LONG
+            ).show()
+            return false
         }
     }
 }

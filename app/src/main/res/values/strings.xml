@@ -1,6 +1,7 @@
 <resources>
     <string name="app_name">Мой Будильник</string>
     <string name="widget_name">Виджет будильника</string>
-    <string name="widget_description">Показывает время ближайшего активного системного будильника</string>
+    <string name="widget_settings">Настройки виджета</string>
+    <string name="widget_description">Показывает время ближайшего активного системного будильника. Настраиваются шрифт, размер, цвет и фон.</string>
     <string name="alarm_icon_description">Будильник</string>
 </resources>
